@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>WebSocket Webcam Client</title>
+</head>
+<body>
+  <video id="video" autoplay playsinline hidden></video>
+  <canvas id="canvas" width="1920" height="1080"></canvas>
+
+  <script>
+    const video = document.getElementById('video');
+    const visibleCanvas = document.getElementById('canvas');
+    const visibleCtx = visibleCanvas.getContext('2d');
+
+    visibleCtx.fillStyle = 'black';
+    visibleCtx.fillRect(0, 0, visibleCanvas.width, visibleCanvas.height);
+    visibleCtx.font = '30px Arial';
+    visibleCtx.fillStyle = 'white';
+    visibleCtx.fillText('Loading...', 10, 50);
+    // Toggle full screen mode on canvas with "F10" key
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'F10') {
+        if (!document.fullscreenElement) {
+          visibleCanvas.requestFullscreen().catch(err => {
+            console.error(`Error attempting to enable full-screen mode: ${err.message}`);
+          });
+        } else {
+          document.exitFullscreen();
+        }
+      }
+    });
+
+    const offscreenCanvas = document.createElement('canvas');
+    offscreenCanvas.width = canvas.getAttribute('width');
+    offscreenCanvas.height = canvas.getAttribute('height');
+    const offscreenCtx = offscreenCanvas.getContext('2d');
+
+    const ws = new WebSocket('ws://localhost:8000');
+
+    ws.onopen = () => {
+      console.log('WebSocket connected');
+
+      navigator.mediaDevices.getUserMedia({video: {
+    width: { ideal: 1280 },
+    height: { ideal: 720 }
+
+  }}).then(stream => {
+        video.srcObject = stream;
+
+        const sendLoop = setInterval(() => {
+          offscreenCtx.drawImage(video, 0, 0, offscreenCanvas.width, offscreenCanvas.height);
+          const frame = offscreenCanvas.toDataURL('image/jpeg').split(',')[1];
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(frame);
+          }
+        }, 100); // 10 fps
+      }).catch(err => {
+        console.error('Camera error:', err);
+      });
+    };
+
+    ws.onmessage = (event) => {
+      const img = new Image();
+      img.onload = () => visibleCtx.drawImage(img, 0, 0, visibleCanvas.width, visibleCanvas.height);
+      img.src = 'data:image/jpeg;base64,' + event.data;
+    };
+
+    ws.onerror = (e) => {
+      console.error('WebSocket error:', e);
+    };
+
+    ws.onclose = () => {
+      console.warn('WebSocket closed');
+    };
+  </script>
+</body>
+</html>

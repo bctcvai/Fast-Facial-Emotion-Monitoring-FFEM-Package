@@ -6,6 +6,66 @@ from mediapipe.python.solutions.drawing_utils import _normalized_to_pixel_coordi
 from deepface import DeepFace
 import random
 import keras
+import websockets
+import asyncio
+import threading
+import time
+import base64
+
+class WebcamSocketCapture:
+    def __init__(self, host='localhost', port=8765):
+        self.host = host
+        self.port = port
+        self.frame = None
+        self.lock = threading.Lock()
+        self.running = True
+
+        # Start WebSocket server in a background thread
+        self.thread = threading.Thread(target=self._start_loop, daemon=True)
+        self.thread.start()
+
+    def _start_loop(self):
+        self.loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self.loop)
+        self.loop.create_task(self._run_server())
+        self.loop.run_forever()
+
+    async def _handler(self, websocket, path):
+        print(f"Client connected: {websocket.remote_address}")
+        self.connection = websocket
+        try:
+            async for message in websocket:
+                img_data = base64.b64decode(message)
+                np_arr = np.frombuffer(img_data, np.uint8)
+                frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+
+                with self.lock:
+                    self.frame = frame
+
+        except websockets.ConnectionClosed:
+            print(f"Client disconnected: {websocket.remote_address}")
+
+    async def _run_server(self):
+        async with websockets.serve(self._handler, self.host, self.port):
+            print(f"WebSocket server running at ws://{self.host}:{self.port}")
+            await asyncio.Future()  # keep running
+
+    def send_frame(self, frame):
+        asyncio.run_coroutine_threadsafe(self.send_frame_async(frame), self.loop)
+    async def send_frame_async(self, frame):
+        # Optionally annotate and send it back
+        print("Sending frame to client")
+        _, jpeg = cv2.imencode('.jpg', frame)
+        await self.connection.send(base64.b64encode(jpeg.tobytes()).decode('utf-8'))
+    def read(self):
+        with self.lock:
+            if self.frame is not None:
+                return True, self.frame.copy()
+            else:
+                return False, None
+
+    def release(self):
+        self.running = False
 
 class FaceEmotionDetection():
     """
@@ -259,11 +319,27 @@ def MonitorEmotion_From_Video(video_path: str)->None:
         - The output should look like: 'path/videoName.avi' or similars
     """
 
+
     # Define la ruta del video
     video_path = video_path
-    if video_path.startswith("cam:"):
-        video_path = int(video_path.split(":")[1])
-    cap = cv2.VideoCapture(video_path)
+    is_web = False
+    if video_path.startswith("websocket:"):
+        # Start a server websocket and listen for frames
+        port = int(video_path.split(":")[1])
+        cap = WebcamSocketCapture(port=port)
+        is_web = True
+        # wait for the first frame
+        while True:
+            success, img = cap.read()
+            print("Waiting for first frame...")
+            time.sleep(1)
+            if success:
+                print("First frame received")
+                break
+    else:
+        if video_path.startswith("cam:"):
+            video_path = int(video_path.split(":")[1])
+        cap = cv2.VideoCapture(video_path)
     pTime = 0
     cTime = 0
     detector = FaceEmotionDetection()
@@ -304,7 +380,11 @@ def MonitorEmotion_From_Video(video_path: str)->None:
         total_faces = len(bboxes)
         cv2.putText(img, f'Total Faces: {total_faces}', (20, 70), cv2.FONT_HERSHEY_PLAIN, 3, (0, 255, 0), 2)
 
-        cv2.imshow('Image',img)
+        if is_web:
+            print("calling send_frame")
+            cap.send_frame(img)
+        else:
+            cv2.imshow('Image',img)
 
         # verifica si se presionó la tecla 'q'
         if cv2.waitKey(1) & 0xFF == ord('q'):
