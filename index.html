@@ -6,7 +6,7 @@
 </head>
 <body>
   <video id="video" autoplay playsinline hidden></video>
-  <canvas id="canvas" width="1920" height="1080"></canvas>
+  <canvas id="canvas" width="1280" height="720"></canvas>
 
   <script>
     const video = document.getElementById('video');
@@ -36,7 +36,7 @@
     offscreenCanvas.height = canvas.getAttribute('height');
     const offscreenCtx = offscreenCanvas.getContext('2d');
 
-    const ws = new WebSocket('ws://localhost:8000');
+    const ws = new WebSocket('ws://localhost:7600');
 
     ws.onopen = () => {
       console.log('WebSocket connected');
@@ -54,7 +54,7 @@
           if (ws.readyState === WebSocket.OPEN) {
             ws.send(frame);
           }
-        }, 100); // 10 fps
+        }, 100); // 2 fps
       }).catch(err => {
         console.error('Camera error:', err);
       });
@@ -72,6 +72,22 @@
 
     ws.onclose = () => {
       console.warn('WebSocket closed');
+
+      // reconnect
+      setTimeout(() => {
+        console.log('Reconnecting...');
+        const newWs = new WebSocket('ws://localhost:8200');
+        newWs.onopen = () => {
+          console.log('WebSocket reconnected');
+          ws = newWs;
+        };
+        newWs.onerror = (e) => {
+          console.error('WebSocket error:', e);
+        };
+        newWs.onclose = () => {
+          console.warn('WebSocket closed');
+        };
+      }, 1000);
     };
   </script>
 </body>

@@ -11,6 +11,7 @@ import asyncio
 import threading
 import time
 import base64
+import traceback
 
 class WebcamSocketCapture:
     def __init__(self, host='localhost', port=8765):
@@ -27,18 +28,23 @@ class WebcamSocketCapture:
     def _start_loop(self):
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
-        self.loop.create_task(self._run_server())
-        self.loop.run_forever()
+        self.loop.run_until_complete(self._run_server())
+        # run in my executor
+
 
     async def _handler(self, websocket, path):
         print(f"Client connected: {websocket.remote_address}")
         self.connection = websocket
         try:
             async for message in websocket:
-                img_data = base64.b64decode(message)
-                np_arr = np.frombuffer(img_data, np.uint8)
-                frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-
+                try:
+                    img_data = base64.b64decode(message)
+                    np_arr = np.frombuffer(img_data, np.uint8)
+                    frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+                except Exception as e:
+                    print(f"Error decoding image: {e}")
+                    traceback.print_exc()
+                    continue
                 with self.lock:
                     self.frame = frame
 
@@ -60,7 +66,9 @@ class WebcamSocketCapture:
     def read(self):
         with self.lock:
             if self.frame is not None:
-                return True, self.frame.copy()
+                copy = self.frame.copy()
+                self.frame = None
+                return True, copy
             else:
                 return False, None
 
@@ -98,6 +106,7 @@ class FaceEmotionDetection():
         y = height - radius - 10
         center = (x, y)
         result = 'neutral'
+        emotions = []
         
         if self.imgRGB is not None:
             results, emotionsVec, bboxs = self.get_dominant_emotion(self.imgRGB,detector_backend)
@@ -134,11 +143,14 @@ class FaceEmotionDetection():
             #print(emotion['region'])
             face_bbox = emotion['region']
             bbox = int(face_bbox['x']), int(face_bbox['y']), int(face_bbox['w']), int(face_bbox['h'])
+            if bbox[0] == 0 and bbox[1] == 0:
+                pass
+            else:
+                dominantEmotions.append(dominant_emotion)
+                emotionsVec.append(emotions)
+                bboxes.append(bbox)
 
-            dominantEmotions.append(dominant_emotion)
-            emotionsVec.append(emotions)
-            bboxes.append(bbox)
-
+        print(bboxes)
         return dominantEmotions, emotionsVec, bboxes
     
 
@@ -356,7 +368,8 @@ def MonitorEmotion_From_Video(video_path: str)->None:
 
         # verifica si se leyó el fotograma correctamente
         if not success:
-            break
+            time.sleep(1/100)
+            continue
 
         # Redimensiona la imagen a las dimensiones deseadas
         img = cv2.resize(img, (640, 480))  # Reemplaza con las dimensiones deseadas
@@ -364,8 +377,13 @@ def MonitorEmotion_From_Video(video_path: str)->None:
         # incrementa el contador de fotogramas
         frame_count += 1
 
-        img, bboxes, result, cuadrant = detector.findFaces(img,fancyDraw=True)
-
+        try:
+            img, bboxes, result, cuadrant = detector.findFaces(img,fancyDraw=True)
+            #img, bboxes, result, caudrant = img, [],[],[]
+        except Exception as e:
+            print("Error processing frame:", e)
+            traceback.print_exc()
+            continue
         # Time Management
         cTime = time.time()
         fps = 1/(cTime-pTime)
@@ -383,6 +401,7 @@ def MonitorEmotion_From_Video(video_path: str)->None:
         if is_web:
             print("calling send_frame")
             cap.send_frame(img)
+            time.sleep(1/100)
         else:
             cv2.imshow('Image',img)
 
