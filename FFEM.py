@@ -29,8 +29,7 @@ class FaceEmotionDetection():
         self.bg_color = [(255, 77, 77),(255, 117, 44),(0, 191, 255),(64, 224, 208)]
 
     def findFaces(self,img, fancyDraw=False,draw=True,detector_backend='mediapipe',cuadrant=True):
-        self.imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        bboxs = []        
+        self.imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)      
         height, width = img.shape[:2]
     
         # calcula las coordenadas del centro del círculo
@@ -41,40 +40,46 @@ class FaceEmotionDetection():
         result = 'neutral'
         
         if self.imgRGB is not None:
-            result, emotions, bbox = self.get_dominant_emotion(self.imgRGB,detector_backend)
+            results, emotionsVec, bboxs = self.get_dominant_emotion(self.imgRGB,detector_backend)
             #self.draw_emotion_quadrant(self.imgRGB,emotions,center)
             
-            bboxs.append([bbox])
-            if draw:
-                if fancyDraw:
-                    img = self.fancyDraw(img,bbox,self.bg_color[1],30,4,1)
-                else:
-                    cv2.rectangle(img, (bbox[0], bbox[1]), (bbox[0]+bbox[3], bbox[2]+bbox[4]), (255,0,255),2)
-                self.draw_text_with_background(img,result.title(),bbox,(255, 255, 255),self.bg_color[1])
+            for result, emotions, bbox in zip(results, emotionsVec, bboxs):
+                if draw:
+                    if fancyDraw:
+                        img = self.fancyDraw(img,bbox,self.bg_color[1],30,4,1)
+                    else:
+                        cv2.rectangle(img, (bbox[0], bbox[1]), (bbox[0]+bbox[3], bbox[2]+bbox[4]), (255,0,255),2)
+                    self.draw_text_with_background(img,result.title(),bbox,(255, 255, 255),self.bg_color[1])
 
-            if cuadrant:
-                self.draw_emotions(img,emotions)
+                if cuadrant:
+                    self.draw_emotions(img,emotions)
 
         return img, bboxs, result, emotions
 
     def get_dominant_emotion(self, img, detector_backend='mediapipe'):
         # analiza la imagen con DeepFace
         result = DeepFace.analyze(img, actions=['emotion'], enforce_detection=False, detector_backend=detector_backend)
-        #print(result)
-        emotion = result[0]
-        # obtiene el diccionario de emociones
-        emotions = emotion['emotion']
+        dominantEmotions=[]
+        emotionsVec = []
+        bboxes = []
+        for emotion in result:
+            # obtiene el diccionario de emociones
+            emotions = emotion['emotion']
+            
+            # encuentra la emoción con el mayor valor
+            dominant_emotion = max(emotions, key=emotions.get)
+            dominant_emotion = emotion['dominant_emotion']
+            # obtiene las coordenadas del cuadro delimitador de la cara
         
-        # encuentra la emoción con el mayor valor
-        dominant_emotion = max(emotions, key=emotions.get)
-        dominant_emotion = emotion['dominant_emotion']
-        # obtiene las coordenadas del cuadro delimitador de la cara
-    
-        #print(emotion['region'])
-        face_bbox = emotion['region']
-        bbox = int(face_bbox['x']), int(face_bbox['y']), int(face_bbox['w']), int(face_bbox['h'])
+            #print(emotion['region'])
+            face_bbox = emotion['region']
+            bbox = int(face_bbox['x']), int(face_bbox['y']), int(face_bbox['w']), int(face_bbox['h'])
 
-        return dominant_emotion, emotions, bbox
+            dominantEmotions.append(dominant_emotion)
+            emotionsVec.append(emotions)
+            bboxes.append(bbox)
+
+        return dominantEmotions, emotionsVec, bboxes
     
 
 
