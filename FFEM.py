@@ -240,7 +240,7 @@ class FaceEmotionDetection():
 
         return img
 
-def MonitorEmotion_From_Video(video_path: str|int, output_path:str)->None:
+def MonitorEmotion_From_Video(video_path: str)->None:
     """
     This function performs Facial Emotion Recognition (FER) on a given video.
 
@@ -258,6 +258,8 @@ def MonitorEmotion_From_Video(video_path: str|int, output_path:str)->None:
 
     # Define la ruta del video
     video_path = video_path
+    if video_path.startswith("cam:0"):
+        video_path = 0
     cap = cv2.VideoCapture(video_path)
     pTime = 0
     cTime = 0
@@ -265,8 +267,8 @@ def MonitorEmotion_From_Video(video_path: str|int, output_path:str)->None:
     frame_count = 0
 
     # Define el codec y crea un objeto VideoWriter
-    fourcc = cv2.VideoWriter_fourcc(*'XVID')
-    out = cv2.VideoWriter(output_path, fourcc, 20.0, (640,480))
+    #fourcc = cv2.VideoWriter_fourcc(*'XVID')
+    #out = cv2.VideoWriter(output_path, fourcc, 20.0, (640,480))
 
     while True:
         succes, img = cap.read()
@@ -281,17 +283,17 @@ def MonitorEmotion_From_Video(video_path: str|int, output_path:str)->None:
         # incrementa el contador de fotogramas
         frame_count += 1
 
-        img, bboxes, result, cuadrant = detector.findFaces(img,frame_count,True)
+        img, bboxes, result, cuadrant = detector.findFaces(img,fancyDraw=True)
 
         # Time Management
         cTime = time.time()
         fps = 1/(cTime-pTime)
         pTime = cTime
 
-        cv2.putText(img, f'FPS: {int(fps)}', (20,70), cv2.FONT_HERSHEY_PLAIN, 3, (0,255,0),2)
+        #cv2.putText(img, f'FPS: {int(fps)}', (20,70), cv2.FONT_HERSHEY_PLAIN, 3, (0,255,0),2)
 
         # Escribe el fotograma en el archivo de salida
-        out.write(img)
+        #out.write(img)
 
         cv2.imshow('Image',img)
 
@@ -300,5 +302,12 @@ def MonitorEmotion_From_Video(video_path: str|int, output_path:str)->None:
             break
 
     cap.release()
-    out.release()
+    #out.release()
     cv2.destroyAllWindows()
+
+import argparse
+if __name__=="__main__":
+    parser = argparse.ArgumentParser(description="Monitor Emotion from Video")
+    parser.add_argument("input")
+    args = parser.parse_args()
+    MonitorEmotion_From_Video(args.input)
