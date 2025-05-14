@@ -74,8 +74,6 @@ class FaceEmotionDetection():
         face_bbox = emotion['region']
         bbox = int(face_bbox['x']), int(face_bbox['y']), int(face_bbox['w']), int(face_bbox['h'])
 
-        print(dominant_emotion)
-        print(type(dominant_emotion))
         return dominant_emotion, emotions, bbox
     
 
@@ -258,23 +256,25 @@ def MonitorEmotion_From_Video(video_path: str)->None:
 
     # Define la ruta del video
     video_path = video_path
-    if video_path.startswith("cam:0"):
-        video_path = 0
+    if video_path.startswith("cam:"):
+        video_path = int(video_path.split(":")[1])
     cap = cv2.VideoCapture(video_path)
     pTime = 0
     cTime = 0
     detector = FaceEmotionDetection()
     frame_count = 0
 
+
     # Define el codec y crea un objeto VideoWriter
     #fourcc = cv2.VideoWriter_fourcc(*'XVID')
     #out = cv2.VideoWriter(output_path, fourcc, 20.0, (640,480))
 
     while True:
-        succes, img = cap.read()
+        success, img = cap.read()
+
 
         # verifica si se leyó el fotograma correctamente
-        if not succes:
+        if not success:
             break
 
         # Redimensiona la imagen a las dimensiones deseadas
@@ -294,6 +294,10 @@ def MonitorEmotion_From_Video(video_path: str)->None:
 
         # Escribe el fotograma en el archivo de salida
         #out.write(img)
+
+        # Overall face count
+        total_faces = len(bboxes)
+        cv2.putText(img, f'Total Faces: {total_faces}', (20, 70), cv2.FONT_HERSHEY_PLAIN, 3, (0, 255, 0), 2)
 
         cv2.imshow('Image',img)
 
